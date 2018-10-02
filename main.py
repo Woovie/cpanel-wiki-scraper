@@ -1,5 +1,5 @@
 #!/usr/bin/env python3.6
-import language_check, requests, json, configparser, os.path
+import language_check, requests, json, configparser, os.path, re
 from bs4 import BeautifulSoup as bs
 from bs4.element import Comment
 from bs4 import SoupStrainer
@@ -18,6 +18,7 @@ if os.path.isfile(jsonFile):
     jsonData = open(jsonFile, 'r')
     jsonLinks = json.load(jsonData)
 links = []
+problemURLs = {}
 
 grammarTool = language_check.LanguageTool('en-US')
 
@@ -54,6 +55,17 @@ def findURLs(url):
     for link in bs(page.content, 'html.parser', parse_only=SoupStrainer('a')):
         if link.has_attr('href'):
             link = link['href']
+            if not 'atlassian' in link:
+                if 'documentation.cpanel.net' in link:
+                    if not 'direct_links' in problemURLs:
+                        problemURLs['direct_links'] = {}
+                    problemURLs['direct_links'][url] = link
+                    print(f'*** WARNING *** Direct URL found! Parent: {url} URL: {link}\n')
+                if link.startswith('http://'):
+                    if not 'insecure' in problemURLs:
+                        problemURLs['insecure'] = {}
+                    problemURLs['insecure'][url] = link
+                    print(f'*** WARNING *** Insecure URL found! Parent: {url} URL: {link}\n')
             if 'documentation.cpanel.net' in link or link.startswith('/display/'):
                 if '%3A' in link:
                     link = link.split('%3A')[0]
@@ -80,5 +92,30 @@ def urlGather():
     else:
         print('No initial link file found, building fresh.')
         parseURLs(findURLs(masterURL))
+    if jsonLinks:
+        print('Gatherer subroutine complete.\nOriginal data: {len(jsonLinks)}\nNew data: {len(links)}')
+        if len(links) > len(jsonLinks):
+            print(f'Change detected, storing data to {jsonFile}.')
+            f = open(jsonFile, 'w')
+            f.write(json.dumps(links))
+        else:
+            print(f'No changes, not writing out to file {jsonFile}.')
+    print('Completed with URL gathering.')
+    if problemURLs > 0:
+        print('The following problems were found:')
+        for problemType in problemURLs:
+            if problemType == 'insecure':
+                print('* Insecure links:')
+                for parentURL in problemURLs[problemType]:
+                    badURL = problemURLs[problemType][parentURL]
+                    newURL = badURL.replace("http", "https")
+                    print(f'  * On page: {parentURL}\n    Original: {badURL}\n    Recommendation: {newURL}')
+            if problemType == 'direct_links':
+                print('* Direct links:')
+                for parentURL in problemURLs[problemType]:
+                    badURL = problemURLs[problemType][parentURL]
+                    newURL = re.sub('https?://documentation.cpanel.net', '', badURL)
+                    print(f'  * On page: {parentURL}\n    Original: {badURL}\n    Recommendation: {newURL}')
+    print('Complete!')
 
 urlGather()
