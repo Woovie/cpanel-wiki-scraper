@@ -101,7 +101,7 @@ def urlGather():
         else:
             print(f'No changes, not writing out to file {jsonFile}.')
     print('Completed with URL gathering.')
-    if problemURLs > 0:
+    if len(problemURLs) > 0:
         print('The following problems were found:')
         for problemType in problemURLs:
             if problemType == 'insecure':
